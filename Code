@@ -1,0 +1,393 @@
+---
+title: "Wahlprogramme"
+author: "Alicia Väth"
+date: "6/21/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+install.packages(contrib.url)
+
+
+## PFD LESEN
+install.packages("pdftools")
+library(pdftools)
+
+## Text analyse
+
+require(quanteda)
+library(readr)
+
+install.packages("stm")
+library("stm")
+library("tidyverse")
+
+install.packages("zoo")
+library("zoo")
+
+
+```
+
+## R Markdown
+
+
+```{r}
+
+#### CDU und Grüne Wahlprogramme 2005 bis 2017 
+## Ohne Inhaötsverzeichnis und Deckblatt
+
+read_clean_pdf <- function(document_name) {
+  pdf_doc <- pdf_text(document_name) 
+  cleaned <- str_replace_all(pdf_doc, "\n\n\n" , "")%>%str_replace_all("\n\n" , "")%>%str_replace_all("-\n" , "")%>%str_replace_all("\n" , "")
+  cleaned<-paste(cleaned,sep="",collapse="")
+  return(cleaned)
+}
+
+
+## CDU Wahlprogramm 2005 bis 2021
+
+C2005 <- read_clean_pdf("CDU-2005.pdf")
+
+C2009 <- read_clean_pdf("CDU-2009.pdf")
+
+C2013 <- read_clean_pdf("CDU-2013.pdf")
+
+C2017 <- read_clean_pdf("CDU-2017.pdf")
+
+C2021 <- read_clean_pdf("CDU-2021.pdf")
+
+
+## Grüne Wahlprogramm 2005 bis 2021
+
+## Das gekürzte Wahlprogramm der Grünen wird nicht eingelesen, daher wir es manuel gekürzt (Einleitung gelöscht)
+
+G2005 <- pdf_text("Grüne-2005.pdf")
+
+G2005 <- str_replace_all(G2005[c(9:123)], "\n\n\n" , "")%>%str_replace_all("\n\n" , "")%>%str_replace_all("-\n" , "")%>%str_replace_all("\n" , "")
+G2005<-paste(G2005,sep="",collapse="")
+
+G2009 <- read_clean_pdf("Grüne-2009.pdf")
+
+G2013 <- read_clean_pdf("Grüne-2013.pdf")
+
+G2017 <- read_clean_pdf("Grüne-2017.pdf")
+
+G2021 <- read_clean_pdf("Grüne-2021.pdf")
+
+```
+
+
+
+## First Look at Data with Clouds
+## make Data in all forms available 
+
+```{r}
+
+## create List
+
+list_wp <- c(C2005,C2009,C2013,C2017,C2021,G2005,G2009,G2013,G2017,G2021)
+
+## create corpus
+
+corpus_wp <- corpus(list_wp)
+
+## create  dfm that is etmmed, punctation removed, set to lower, case insensitive but not yet cleaned for spesific words
+
+dfm_wp_uncleaned <- dfm(corpus_wp, tolower = TRUE, remove = stopwords("german"), case_insensitive = TRUE, stem = TRUE, remove_punct = TRUE)
+
+## first Look at Data
+
+textplot_wordcloud(dfm_wp_uncleaned,max_words = 500, min_count = 200)
+
+
+```
+
+Let`s clean the data from Words that are not interesting for comparing the content, as they are party or document spesific but do not say much about the content. Also clear the numbers. 
+
+```{r}
+
+## clean specific words and numbers
+
+dfm_wp <- dfm(dfm_wp_uncleaned, remove = c("grün","cdu", "grüne", "bündnis", "90", "bundestagswahl", "wahlprogramm","budeswahlprogramm","bundestagswahlprogramm", "bund","grünen","dass","csu","info@gruen","gruen","gruene","regierungsprogramm","s",(0:1000000)))
+
+## new look
+
+textplot_wordcloud(dfm_wp,max_words = 500, min_count = 200)
+
+```
+
+
+Next the euclidian distance will be meassured and visualised in a Dendogram
+
+```{r}
+
+## name columns
+
+dfm_wp <- `docnames<-`(dfm_wp, c("C2005","C2009","C2013","C2017","C2021","G2005","G2009","G2013","G2017","G2021"))
+
+## create weighted dfm
+
+dfm_wp_weight <- dfm_weight(dfm_wp, scheme = "prop")
+
+
+## get text distance
+
+dfm_dist_weight <- textstat_dist(dfm_wp_weight, method = "euclidean")
+
+dendogram_wp <- hclust(as.dist(dfm_dist_weight))
+
+```
+
+Parteien werden gut erkannt 
+
+```{r, fig.width = 6, fig.height = 8}
+plot(dendogram_wp, main = "Wahlprogramme der Grünen und der CDU von 2005 bis 2021")
+```
+
+C2005 seemed to be different then the rest, otherwise partys are recognised very well.
+Through examining C2005 it showed that the most used word is "s" so I corrected that. now it recocnises partys well.
+
+
+
+Next I will look at cosine similarities 
+
+```{r}
+
+simil_wp <- textstat_simil(dfm_wp_weight, method="cosine")
+
+
+heatmap(as.matrix(simil_wp),Colv = F)
+
+
+```
+
+Also here one can see that party programs resemble their own party`s programms. 
+
+
+Next step will be to survey specific topics for resemblance. Therefore the most used words will be examined.
+
+
+```{r}
+
+dfm_sort(dfm_wp_weight, margin = "both")
+
+## possible intresting words -> Europe, Sicherheit, Wirtschaft, Klimaa, Migration
+
+```
+
+
+Next step ist to find Words in context of a spesific word-beginning and to print them out in a wordcloud
+
+
+
+```{r}
+
+## Funktion die als Argumente erst das Wahlprogramm und als 2. eine pattern nimmt und dann eine Wordcloud baut zu den häufigsten wörtern im Kontext der pattern
+
+kwic_cloud <- function(Wahlprogramm,pattern) {
+  WP_pattern <- kwic(Wahlprogramm,pattern, window= 20)
+  cloud <- textplot_wordcloud(dfm(corpus(WP_pattern), remove = stopwords("german"), remove_punct = TRUE),min_count = 2)
+  return(cloud)
+}
+
+## Funktion die für eine gegebene Pattern eine worldcloud mit der funtion kwic_cloud erzeugt
+
+kwic_clouds <- function(pattern) {
+  for (i in list_wp){
+    kwic_cloud(i,pattern)
+  }
+}
+
+europa <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)europa[^\\s]+")))
+
+Europa <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Europa[^\\s]+")))
+
+
+
+kwic_clouds(c(europa,Europa))
+
+
+```
+
+
+Distanz der Wahlprogramme je nach Kontext eines Begriffes
+
+
+
+```{r}
+## function takes as Arguments the programm, a pattern and the windowsize for the kwic function. It returns only the Kontext and the Word in a single List
+
+kontext_clean <- function(Wahlprogramm, pattern, window) {
+  kontext_wp <- kwic(Wahlprogramm, pattern, window = window)
+  kontext_wp <- c(kontext_wp[,4],kontext_wp[,6])
+}
+
+
+
+
+
+dendogram_kontext <- function(pattern,window,title_dendogram) {
+  
+  kontext_list <- c()
+  
+  for (i in list_wp) {
+  kontext_list[[i]] <- (kontext_clean(i,pattern,window))
+  }
+  
+  kontext_corpus <- corpus(as.character(kontext_list))
+  
+  dfm_kontext <- dfm(kontext_corpus, tolower = TRUE, remove = stopwords("german"), case_insensitive = TRUE, stem = TRUE, remove_punct = TRUE)
+  
+  dfm_kontext <- dfm(dfm_kontext, remove =c("grün","cdu", "grüne", "bündnis", "90", "bundestagswahl", "wahlprogramm","budeswahlprogramm","bundestagswahlprogramm", "bund","grünen","dass","csu","info@gruen","gruen","gruene","regierungsprogramm","s",(0:1000000),"text1","document1","document2","document3","document4","="))
+  
+  dfm_kontext <- `docnames<-`(dfm_kontext, c("C2005","C2009","C2013","C2017","C2021","G2005","G2009","G2013","G2017","G2021"))
+  
+  dfm_kontext_weight <- dfm_weight(dfm_kontext, scheme = "prop")
+  
+  dfm_kontext_dist_weight <- textstat_dist(dfm_kontext_weight, method = "euclidean")
+  
+  dendogram_kontext_wp <- hclust(as.dist(dfm_kontext_dist_weight))
+  
+  plot(dendogram_kontext_wp, main = title_dendogram)
+  
+}
+
+?hclust
+
+```
+
+
+
+
+
+Next step I will use the dendogram_kontext function with different words. The words that are used are taken from a statistic from Tagesschau that showes the 5 biggest perceived threats in Germany. Thereby number 4 "Corona" will be ignored for the evaluation as it makes no sence to check the Wahlprogramme from before 2021 for it. But it will still be run to serve as a test. If the function works well there should be a clear seperation inbetween the programms from 2021 and the other.
+
+which are the following:
+
+1. Rechtsextremismus (70,3%)
+2. Klimawandel (68,6%)
+3. Soziale Spaltung (61,4%)
+4. Corona Pandemie (59,0%)
+5. Vereinsamung (52,4%)
+
+
+
+1. Rechtsextremismus:
+```{r}
+
+## Looking for all words that beginn with Rechtsextrem or rechtsextrem
+
+Rechtsextremismus <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Rechtsextrem[^\\s]+")))
+
+rechtsextremismus <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Rechtsextrem[^\\s]+")))
+
+
+rechtsextrem_dendogram <- dendogram_kontext(c(Rechtsextremismus,rechtsextremismus),25, "Rechtsextremismus")
+
+
+
+rechtsextrem_dendogram
+```
+
+Result: The Dendogram loooks like not the Greens are getting closer to the CDU but actually the other way around. The programs that are older seem to be more allike, while the greens programs where allways alike concerning that topic.
+
+
+2. Klimawandel
+
+```{r}
+
+K <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Klima[^\\s]+")))
+
+k <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)klima[^\\s]+")))
+
+
+Klima_dendogram <- dendogram_kontext(c(K,k),25,"Klimawandel")
+
+klima_dendogram
+
+```
+
+3. Soziale Spaltung
+
+```{r}
+
+s_words <- c("Soziale Sicherheit", "Finanzielle Sicherheit", "finanzielle Sicherheit", "soziale Sicherheit", "gesellschaftlicher Zusammenhalt", "gesellschaftlichen Zusammenhalt", "Kinderarmut", "Altersarmut","zusammenhalt","Zusammenhalt", "Zivilgesellschaft")
+
+S <- unique(unlist(str_extract_all(list_wp,c("(?<=\\b)Arm[^\\s]+"))))
+
+## deleting the words "Armee" and "Armee."
+S_c <- S[-(4:5)]
+
+s <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)arm[^\\s]+")))
+
+s_s <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Spaltung[^\\s]+")))
+
+s_u <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Ungleich[^\\s]+")))
+
+s_b <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Benachteiligung[^\\s]+")))
+
+s_i <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Integration[^\\s]+")))
+
+s_i
+
+## politische events für erklärung heranführen
+## klimaschutzprogramm C2021 nah
+## CDU -> finanzkrise 
+
+
+spaltung_dendogram <- dendogram_kontext(c(s_words,s_s,S_c,s,s_u,s_b,s_i),25,"Soziale Spaltung")
+
+spaltung_dendogram
+
+```
+
+4. Corona Pandemie
+```{r}
+
+C <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Corona[^\\s]+")))
+
+c <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)corona[^\\s]+")))
+
+
+corona_dendogram <- dendogram_kontext(c(C,c),25,"Corona")
+
+```
+Result:
+The seperation inbetween the programms from 2021 and the others is very clear and as expected. 
+
+
+5. Vereinsamung
+```{r}
+
+E <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Vereinsam[^\\s]+")))
+
+e <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Einsam[^\\s]+")))
+
+
+vereinsamung_dendogram <- dendogram_kontext(c(E,e),25,"Vereinsamung")
+
+vereinsamung_dendogram
+
+```
+Result:
+
+Vereinsamung and Einsamkeit seem to be a not very often reffered to Topic. Due to Corona in 2021 it got more important. Still it is rarely reffered to while it is one of the top 5 Topics people are concerned by. 
+
+
+6. Europa
+```{r}
+
+Euro <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Europ[^\\s]+")))
+
+euro <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)europ[^\\s]+")))
+
+
+vereinsamung_dendogram <- dendogram_kontext(c(Euro,euro),25,"Europa")
+
+vereinsamung_dendogram
+
+```
