@@ -95,13 +95,21 @@ list_wp <- c(C2005,C2009,C2013,C2017,C2021,G2005,G2009,G2013,G2017,G2021)
 
 corpus_wp <- corpus(list_wp)
 
-## create  dfm that is etmmed, punctation removed, set to lower, case insensitive but not yet cleaned for spesific words
+## check raw Data
+
+dfm_wp_ganz <- dfm(corpus_wp, tolower = F, case_insensitive = F, stem = F, remove_punct = F)
+
+textplot_wordcloud(dfm_wp_ganz,max_words = 500, min_count = 200)
+
+
+## create  dfm that is stemmed, punctation removed, set to lower, case insensitive but not yet cleaned for spesific words
 
 dfm_wp_uncleaned <- dfm(corpus_wp, tolower = TRUE, remove = stopwords("german"), case_insensitive = TRUE, stem = TRUE, remove_punct = TRUE)
 
 ## first Look at Data
 
 textplot_wordcloud(dfm_wp_uncleaned,max_words = 500, min_count = 200)
+
 
 
 ```
@@ -138,7 +146,14 @@ dfm_wp_weight <- dfm_weight(dfm_wp, scheme = "prop")
 
 dfm_dist_weight <- textstat_dist(dfm_wp_weight, method = "euclidean")
 
-dendogram_wp <- hclust(as.dist(dfm_dist_weight))
+dendogram_wp <- hclust(as.dist(dfm_dist_weight),method = "complete")
+
+
+?text_dist
+
+d = editDistance(G2005,C2005)
+
+?hclust
 
 ```
 
@@ -223,12 +238,21 @@ Distanz der Wahlprogramme je nach Kontext eines Begriffes
 
 kontext_clean <- function(Wahlprogramm, pattern, window) {
   kontext_wp <- kwic(Wahlprogramm, pattern, window = window)
-  kontext_wp <- c(kontext_wp[,4],kontext_wp[,6])
+  kontext_wp <- c(kontext_wp[,4],kontext_wp[,5],kontext_wp[,6])
+}
+```
+
+
+## so wird die gefundene pattern nicht mit einbezogen, code um diese mit einzubeziehen:
+
+
+kontext_clean <- function(Wahlprogramm, pattern, window) {
+  kontext_wp <- kwic(Wahlprogramm, pattern, window = window)
+  kontext_wp <- c(kontext_wp[,4],kontext_wp[,5],kontext_wp[,6])
 }
 
 
-
-
+```{r}
 
 dendogram_kontext <- function(pattern,window,title_dendogram) {
   
@@ -256,7 +280,6 @@ dendogram_kontext <- function(pattern,window,title_dendogram) {
   
 }
 
-?hclust
 
 ```
 
@@ -283,7 +306,7 @@ which are the following:
 
 Rechtsextremismus <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Rechtsextrem[^\\s]+")))
 
-rechtsextremismus <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Rechtsextrem[^\\s]+")))
+rechtsextremismus <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)rechtsextrem[^\\s]+")))
 
 
 rechtsextrem_dendogram <- dendogram_kontext(c(Rechtsextremismus,rechtsextremismus),25, "Rechtsextremismus")
@@ -293,12 +316,14 @@ rechtsextrem_dendogram <- dendogram_kontext(c(Rechtsextremismus,rechtsextremismu
 rechtsextrem_dendogram
 ```
 
-Result: The Dendogram loooks like not the Greens are getting closer to the CDU but actually the other way around. The programs that are older seem to be more allike, while the greens programs where allways alike concerning that topic.
+Result: The Dendogram loooks like not the Greens are getting closer to the CDU but actually the other way around. The programs that are older from the CDU seem to be more allike, while the greens programs where allways alike concerning that topic.
 
 
 2. Klimawandel
 
 ```{r}
+
+## Pattern
 
 K <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Klima[^\\s]+")))
 
@@ -334,6 +359,7 @@ s_i <- unique(unlist(str_extract_all(list_wp, "(?<=\\b)Integration[^\\s]+")))
 
 s_i
 
+S
 ## politische events für erklärung heranführen
 ## klimaschutzprogramm C2021 nah
 ## CDU -> finanzkrise 
